@@ -1,2 +1,3 @@
 code will upload later, please be patient...I am tired today Sunday, February 1, 2026 1:45:55 AM
-the instanse almost setup. Mr. Enock never replied since...Sunday, February 1, 2026 10:58:46 PM
+the instanse almost setup. Mr. Enock never replied since...Sunday, February 1, 2026 10:58:46 PM =2nd Feb. 06 minutes Enock replied. its ...
+for now we're here
