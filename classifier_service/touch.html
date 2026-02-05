@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Dissertation Survey</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    html, body {
+      font-family: Arial, sans-serif;
+      background: #f3f4f9;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 520px;
+      margin: 32px auto;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px 0 #0002;
+      padding: 32px 24px 24px 24px;
+    }
+    h1, h2 {
+      text-align: center;
+      color: darkkhaki;
+    }
+    input[type="text"], textarea {
+      width: 100%;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      font-size: 16px;
+      margin-bottom: 14px;
+    }
+    textarea {
+      resize: vertical;
+      font-family: monospace;
+      background: #f9f7ff;
+    }
+    label {
+      font-weight: bold;
+      color: #36304a;
+      display: block;
+      margin-bottom:2px;
+    }
+    .touch-demo {
+      margin: 20px 0 10px 0;
+      border: 2px dashed darkkhaki;
+      background: #fbf8ff;
+      border-radius: 10px;
+      width: 100%;
+      height: 210px;
+      position: relative;
+      overflow: hidden;
+      touch-action: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .touch-instructions {
+      color: darkkhaki;
+      font-size: 15px;
+      text-align: center;
+      margin-bottom: 7px;
+      user-select: none;
+    }
+    .touch-dot {
+      width: 20px;
+      height: 20px;
+      background: darkkhaki;
+      border-radius: 100%;
+      position: absolute;
+      pointer-events: none;
+      transition: opacity 0.5s;
+      opacity: 0.7;
+      box-shadow: 0 0 8px darkkhaki;
+    }
+    .draw-path {
+      stroke: #263177;
+      stroke-width: 3.5;
+      fill: none;
+      pointer-events: none;
+    }
+    .touch-logs {
+      font-size: 13px;
+      min-height: 36px;
+      background: #f3f0f8;
+      border-radius: 5px;
+      margin-bottom: 12px;
+      padding: 8px;
+      overflow-x:auto;
+      white-space: pre-line;
+      color: darkkhaki;
+    }
+    .success {
+      padding: 12px;
+      color: #fff;
+      background: #81c784;
+      border-radius: 7px;
+      text-align: center;
+      margin: 15px 0;
+    }
+    .fail {
+      padding: 12px;
+      color: #fff;
+      background: #e57373;
+      border-radius: 7px;
+      text-align: center;
+      margin: 15px 0;
+    }
+    @media (max-width: 600px) {
+      .container { padding: 12px 3vw; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <form id="surveyForm" method="POST" autocomplete="off" novalidate>
+      <h1>Dissertation Survey: Browser Fingerprinting</h1>
+      <input title="Randomized name identifier" placeholder="Random Name" name="name" id="name" readonly required>
+
+      <h2>Your Fingerprint</h2>
+      <label for="fpTextArea">Browser fingerprint</label>
+      <textarea id="fpTextArea" name="fingerprint" placeholder="Browser fingerprint..." title="Browser fingerprint JSON" readonly required cols="50" rows="8"></textarea>
+      
+      <div class="touch-instructions">
+      </div>
+      <label for="touchDemo">Touch/click canvas</label>
+      <div class="touch-demo" id="touchDemo" tabindex="0" aria-label="Touch/click to capture gesture">
+        <svg id="drawCanvas" style="display:block;position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none"></svg>
+      </div>
+      <label for="touchLogs">Logged gestures</label>
+      <div class="touch-logs" id="touchLogs"></div>
+      <textarea id="touchDataField" name="touch_data" title="Captured touch/mouse event data (JSON)" placeholder="Touch/mouse event data" readonly cols="50" rows="3" style="display:none"></textarea>
+      <!-- THE touch_csv FIELD -->
+      <textarea id="touchCsvField" name="touch_csv" title="Touch data as CSV" placeholder="Touch CSV rows" readonly cols="50" rows="6" style="display:none"></textarea>
+      <input type="submit" value="Send" style="margin-top:6px;font-size:17px;">
+      <div id="submitMsg"></div>
+    </form>
+  </div>
+  <script>
+    // --- FingerprintJS load (from CDN) ---
+    const fpPromise = import('https://openfpcdn.io/fingerprintjs/v3')
+      .then(FingerprintJS => FingerprintJS.load());
+    let fingerprintObj = {};
+    fpPromise.then(fp => fp.get()).then(result => {
+      fingerprintObj = result.components;
+      document.getElementById("fpTextArea").textContent = JSON.stringify(fingerprintObj, null, 2);
+    });
+
+    // --- Generate random name ---
+    function randomNumber(len = 3) {
+      let n = '';
+      for (let count = 0; count < len; count++)
+        n += Math.floor(Math.random() * 10).toString();
+      return n;
+    }
+    window.onload = function() {
+      document.getElementById("name").value = randomNumber(3);
+    };
+
+    // --- Touch/Click data collection & visualization ---
+    const touchDemo = document.getElementById('touchDemo');
+    const touchLogs = document.getElementById('touchLogs');
+    const touchDataField = document.getElementById('touchDataField');
+    const touchCsvField = document.getElementById('touchCsvField');
+    const drawCanvas = document.getElementById('drawCanvas');
+    const msgId = "touchDemoMsg";
+    let isDrawing = false, lastPoint = null, currPath = null;
+    let recordedEvents = [];
+    let drawingPaths = [];
+    function getRect(elem) { return elem.getBoundingClientRect(); }
+
+    function addEventLog(log) {
+      recordedEvents.push(log);
+      updateTouchLogDisplay();
+    }
+    function updateTouchLogDisplay() {
+      let textLog = recordedEvents.map((e,i) =>
+        `${i+1}) [${e.event}] at (${e.x},${e.y})${e.extra || ""}`
+      ).join('\n');
+      touchLogs.textContent = textLog;
+      // Still store the raw JSON in a hidden field
+      touchDataField.value = JSON.stringify(recordedEvents);
+    }
+
+    function showTapDot(x, y) {
+      let dot = document.createElement("div");
+      dot.className = "touch-dot";
+      dot.style.left = (x-10)+"px";
+      dot.style.top = (y-10)+"px";
+      touchDemo.appendChild(dot);
+      setTimeout(()=>{ dot.style.opacity=0; setTimeout(()=>dot.remove(),400); }, 700);
+    }
+
+    function addDrawPoint(x, y, pressure=1.0) {
+      if (currPath) {
+        currPath.points.push({x, y});
+        updateSVGPath(currPath);
+      }
+    }
+    function startDrawing(x, y, pressure=1.0) {
+      currPath = { points: [ {x, y} ] };
+      drawingPaths.push(currPath);
+      isDrawing = true;
+      addEventLog({event:"start_draw", x, y, t:Date.now(), p: pressure});
+      updateSVGPath(currPath);
+      document.getElementById(msgId).style.display = "none";
+    }
+    function continueDrawing(x, y, pressure=1.0) {
+      if (!isDrawing) return;
+      addDrawPoint(x, y, pressure);
+      addEventLog({event:"draw", x, y, t:Date.now(), p: pressure});
+    }
+    function stopDrawing(x, y, pressure=1.0) {
+      if (!isDrawing) return;
+      addDrawPoint(x, y, pressure);
+      addEventLog({event:"end_draw", x, y, t:Date.now(), p: pressure});
+      isDrawing = false;
+      currPath = null;
+    }
+    function updateSVGPath(pathObj) {
+      let svg = drawCanvas;
+      svg.innerHTML = '';
+      for (let path of drawingPaths) {
+        if (path.points.length < 2) continue;
+        let pline = document.createElementNS("http://www.w3.org/2000/svg","polyline");
+        pline.setAttribute("class","draw-path");
+        pline.setAttribute("points", path.points.map(pt=>`${pt.x},${pt.y}`).join(" "));
+        svg.appendChild(pline);
+      }
+    }
+    // Mouse events
+    touchDemo.addEventListener("mousedown", function(e){
+      if (e.button !== 0) return;
+      let rect = getRect(touchDemo);
+      let x = Math.round(e.clientX - rect.left), y = Math.round(e.clientY - rect.top);
+      let p = e.pressure !== undefined ? e.pressure : 1.0;
+      startDrawing(x, y, p);
+    });
+    touchDemo.addEventListener("mousemove", function(e){
+      if (!isDrawing) return;
+      let rect = getRect(touchDemo);
+      let x = Math.round(e.clientX - rect.left), y = Math.round(e.clientY - rect.top);
+      let p = e.pressure !== undefined ? e.pressure : 1.0;
+      continueDrawing(x, y, p);
+    });
+    touchDemo.addEventListener("mouseup", function(e){
+      let rect = getRect(touchDemo);
+      let x = Math.round(e.clientX - rect.left), y = Math.round(e.clientY - rect.top);
+      let p = e.pressure !== undefined ? e.pressure : 1.0;
+      stopDrawing(x, y, p);
+    });
+    // Add tap/click for fast pointer
+    touchDemo.addEventListener("click", function(e){
+      let rect = getRect(touchDemo);
+      let x = Math.round(e.clientX - rect.left), y = Math.round(e.clientY - rect.top);
+      showTapDot(x, y);
+      let p = e.pressure !== undefined ? e.pressure : 1.0;
+      addEventLog({event:"tap", x, y, t:Date.now(), p: p});
+    });
+
+    // Touch (mobile) events
+    touchDemo.addEventListener("touchstart", function(e){
+      e.preventDefault();
+      let touch = e.touches[0], rect = getRect(touchDemo);
+      let x = Math.round(touch.clientX - rect.left), y = Math.round(touch.clientY - rect.top);
+      let p = (touch.force !== undefined && touch.force > 0) ? touch.force : 1.0;
+      startDrawing(x, y, p);
+    }, {passive:false});
+    touchDemo.addEventListener("touchmove", function(e){
+      e.preventDefault();
+      let touch = e.touches[0], rect = getRect(touchDemo);
+      let x = Math.round(touch.clientX - rect.left), y = Math.round(touch.clientY - rect.top);
+      let p = (touch.force !== undefined && touch.force > 0) ? touch.force : 1.0;
+      continueDrawing(x, y, p);
+    }, {passive:false});
+    touchDemo.addEventListener("touchend", function(e){
+      let rect = getRect(touchDemo);
+      // On touchend, there may be no e.touches
+      let lastX = null, lastY = null, lastP = 1.0;
+      if (recordedEvents.length>0) {
+        let last = recordedEvents[recordedEvents.length-1];
+        lastX = last.x; lastY = last.y;
+        lastP = last.p || 1.0;
+      }
+      stopDrawing(lastX,lastY,lastP);
+    });
+
+    // --- Form submission handler: URL-encode for Python http.server BaseHTTPRequestHandler ---
+    const surveyForm = document.getElementById('surveyForm');
+    const submitMsg = document.getElementById('submitMsg');
+    surveyForm.onsubmit = async function(e){
+      e.preventDefault();
+      submitMsg.textContent='';
+      submitMsg.className='';
+      const name = surveyForm.name.value.trim();
+      const fp = surveyForm.fingerprint.value.trim();
+      if (!name || !fp || recordedEvents.length === 0) {
+        submitMsg.textContent = "Incomplete data, please interact with the canvas and try again.";
+        submitMsg.className = "fail";
+        return;
+      }
+      // Prepare touch_csv in required format
+      const session = "1";
+      const user_id = name;
+      let csvRows = [
+        "user_id,session,timestamp,x_coordinate,y_coordinate,pressure"
+      ];
+      for (const ev of recordedEvents) {
+        csvRows.push([
+          user_id,
+          session,
+          ev.t, // timestamp
+          ev.x,
+          ev.y,
+          ev.p !== undefined ? ev.p : 1.0
+        ].join(","));
+      }
+      touchCsvField.value = csvRows.join("\n");
+
+      // Use URLSearchParams for URL-encoded form submission (for http.server servers)
+      const postData = new URLSearchParams();
+      postData.append('name', name);
+      postData.append('fingerprint', fp);
+      postData.append('touch_csv', touchCsvField.value);
+
+      try {
+        const res = await fetch(surveyForm.action || '/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: postData.toString(),
+        });
+        if (res.ok) {
+          submitMsg.textContent = "Data submitted successfully! Thank you.";
+          submitMsg.className = "success";
+          surveyForm.querySelector('input[type="submit"]').disabled = true;
+        } else {
+          submitMsg.textContent = "Submission failed: " + (await res.text());
+          submitMsg.className = "fail";
+        }
+      } catch(err) {
+        submitMsg.textContent = "Submission failed (network error).";
+        submitMsg.className = "fail";
+      }
+    };
+  </script>
+</body>
+</html>
