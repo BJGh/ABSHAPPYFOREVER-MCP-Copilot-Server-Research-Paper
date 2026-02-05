@@ -1,0 +1,29 @@
+a = 10;
+list TestList;
+set TestSet;
+TestList.add(0, 1);
+TestList.add(0, 2);
+TestList.add(0, 3);
+TestList.add(0, 4);
+TestList.add(0, 5);
+
+TestSet.add(10);
+TestSet.add(10);
+TestSet.add(10);
+TestSet.add(5);
+TestSet.add(13);
+TestSet.delete(5);
+
+if (TestSet.contains(5)) {
+
+print 5;
+} else {
+
+print 10;
+}
+
+TestSet.printSet();
+
+TestList.printList();
+a = a + TestList.peek(4);
+print a;
