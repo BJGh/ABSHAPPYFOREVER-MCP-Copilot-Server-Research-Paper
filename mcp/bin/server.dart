@@ -6,6 +6,169 @@ import 'package:shelf_router/shelf_router.dart';
 
 // Используем Router для чистоты кода
 final router = Router();
+// ...existing code...
+import 'package:logging/logging.dart';
+
+final router = Router();
+final Logger _logger = Logger('server');
+// ...existing code...
+
+Future<Response> handleFingerprintData(Request req) async {
+  try {
+    final body = await req.readAsString();
+    final jsonData = jsonDecode(body);
+
+    // If payload comes from C# client, save to separate log file and return
+    final String source = (jsonData['source'] ?? '').toString().toLowerCase();
+    if (source == 'csharp') {
+      final logsDir = Platform.isWindows ? '..\\logs' : '../logs';
+      final logsPath = Platform.isWindows ? '..\\logs\\csharp.log' : '../logs/csharp.log';
+      await Directory(logsDir).create(recursive: true);
+      await File(logsPath).writeAsString('${DateTime.now().toIso8601String()} ${jsonEncode(jsonData)}\n', mode: FileMode.append);
+      _logger.info('Saved C# payload to $logsPath');
+      return Response.ok(jsonEncode({'status': 'saved', 'file': logsPath}), headers: {'content-type': 'application/json'});
+    }
+
+    // We expect the client to send 'type' (e.g., 'keystroke', 'sensor_acc') and 'csv_data'
+    final String type = jsonData['type'] ?? 'clicks';
+    final String csvRow = jsonData['touch_data_csv'] ?? '';
+
+    if (csvRow.isEmpty) return Response.badRequest(body: 'Empty data');
+
+    // Maps to your classifier_service directory
+    final fileName = '$type.csv';
+    final filePath = Platform.isWindows
+        ? '..\\classifier_service\\$fileName'
+        : '../classifier_service/$fileName';
+
+    final file = File(filePath);
+    await file.writeAsString('$csvRow\n', mode: FileMode.append);
+
+    _logger.info('Logged to $fileName');
+    return Response.ok(jsonEncode({'status': 'saved', 'file': fileName}),
+        headers: {'content-type': 'application/json'});
+  } catch (e) {
+    _logger.severe('IO Error: $e');
+    return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+  }
+}
+// ...existing code...
+
+void main() async {
+  // Configure logging output
+  Logger.root.level = Level.INFO;
+  Logger.root.onRecord.listen((rec) {
+    stderr.writeln('${rec.level.name}: ${rec.time}: ${rec.loggerName}: ${rec.message}');
+    // persist to rotating files (info/warning/error)
+    final logName = rec.level >= Level.SEVERE
+        ? 'error.log'
+        : rec.level >= Level.WARNING
+            ? 'warning.log'
+            : 'info.log';
+    final logPath = Platform.isWindows ? '..\\logs\\$logName' : '../logs/$logName';
+    try {
+      File(logPath).createSync(recursive: true);
+      File(logPath).writeAsStringSync('${rec.time.toIso8601String()} ${rec.level.name} ${rec.loggerName}: ${rec.message}\n', mode: FileMode.append);
+    } catch (_) {
+      // ignore file write errors (best-effort)
+    }
+  });
+
+  router.get('/', rootHandler);
+  router.get('/health', (Request r) => Response.ok('OK'));
+  router.post('/api/v1/fingerprint_data', handleFingerprintData);
+  router.get('/api/v1/start/native', startNativeGetHandler);
+
+  final handler = const Pipeline()
+      .addMiddleware(logRequests())
+      .addHandler(router);
+
+  final server = await io.serve(handler, '0.0.0.0', 8080);
+  _logger.info('--- ENOK MCP v2026 ACTIVE ---');
+  _logger.info('Listening on port ${server.port} — run with: dart run server.dart (from bin/)');
+}
+```// filepath: c:\Games\INFINITYREBUILDINGTRUSTLOOPServerLIFEGAMESFORWINDOWSLIFE\mcp\bin\server.dart
+// ...existing code...
+import 'package:logging/logging.dart';
+
+final router = Router();
+final Logger _logger = Logger('server');
+// ...existing code...
+
+Future<Response> handleFingerprintData(Request req) async {
+  try {
+    final body = await req.readAsString();
+    final jsonData = jsonDecode(body);
+
+    // If payload comes from C# client, save to separate log file and return
+    final String source = (jsonData['source'] ?? '').toString().toLowerCase();
+    if (source == 'csharp') {
+      final logsDir = Platform.isWindows ? '..\\logs' : '../logs';
+      final logsPath = Platform.isWindows ? '..\\logs\\csharp.log' : '../logs/csharp.log';
+      await Directory(logsDir).create(recursive: true);
+      await File(logsPath).writeAsString('${DateTime.now().toIso8601String()} ${jsonEncode(jsonData)}\n', mode: FileMode.append);
+      _logger.info('Saved C# payload to $logsPath');
+      return Response.ok(jsonEncode({'status': 'saved', 'file': logsPath}), headers: {'content-type': 'application/json'});
+    }
+
+    // We expect the client to send 'type' (e.g., 'keystroke', 'sensor_acc') and 'csv_data'
+    final String type = jsonData['type'] ?? 'clicks';
+    final String csvRow = jsonData['touch_data_csv'] ?? '';
+
+    if (csvRow.isEmpty) return Response.badRequest(body: 'Empty data');
+
+    // Maps to your classifier_service directory
+    final fileName = '$type.csv';
+    final filePath = Platform.isWindows
+        ? '..\\classifier_service\\$fileName'
+        : '../classifier_service/$fileName';
+
+    final file = File(filePath);
+    await file.writeAsString('$csvRow\n', mode: FileMode.append);
+
+    _logger.info('Logged to $fileName');
+    return Response.ok(jsonEncode({'status': 'saved', 'file': fileName}),
+        headers: {'content-type': 'application/json'});
+  } catch (e) {
+    _logger.severe('IO Error: $e');
+    return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+  }
+}
+// ...existing code...
+
+void main() async {
+  // Configure logging output
+  Logger.root.level = Level.INFO;
+  Logger.root.onRecord.listen((rec) {
+    stderr.writeln('${rec.level.name}: ${rec.time}: ${rec.loggerName}: ${rec.message}');
+    // persist to rotating files (info/warning/error)
+    final logName = rec.level >= Level.SEVERE
+        ? 'error.log'
+        : rec.level >= Level.WARNING
+            ? 'warning.log'
+            : 'info.log';
+    final logPath = Platform.isWindows ? '..\\logs\\$logName' : '../logs/$logName';
+    try {
+      File(logPath).createSync(recursive: true);
+      File(logPath).writeAsStringSync('${rec.time.toIso8601String()} ${rec.level.name} ${rec.loggerName}: ${rec.message}\n', mode: FileMode.append);
+    } catch (_) {
+      // ignore file write errors (best-effort)
+    }
+  });
+
+  router.get('/', rootHandler);
+  router.get('/health', (Request r) => Response.ok('OK'));
+  router.post('/api/v1/fingerprint_data', handleFingerprintData);
+  router.get('/api/v1/start/native', startNativeGetHandler);
+
+  final handler = const Pipeline()
+      .addMiddleware(logRequests())
+      .addHandler(router);
+
+  final server = await io.serve(handler, '0.0.0.0', 8080);
+  _logger.info('--- ENOK MCP v2026 ACTIVE ---');
+  _logger.info('Listening on port ${server.port} — run with: dart run server.dart (from bin/)');
+}final Logger _logger = Logger('server');
 Future<Response> handleFingerprintData(Request req) async {
   final body = await req.readAsString();
   
@@ -139,7 +302,7 @@ Future<Response> startNativeGetHandler(Request req) async {
       process = await Process.start(command, args, mode: ProcessStartMode.detached);
     }
 
-    print('Запущен нативный сервер "$name" command="$command" args=$args pid=${process.pid}');
+    _logger.info('Запущен нативный сервер "$name" command="$command" args=$args pid=${process.pid}');
     return Response.ok(
         jsonEncode({'status': 'started', 'name': name, 'pid': process.pid, 'command': command, 'args': args}),
         headers: {'content-type': 'application/json'});
@@ -183,9 +346,10 @@ import 'dart:io';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
+import 'package:logging/logging.dart';
 
 final router = Router();
-
+final log = Logger('MCPLogger');
 // Unified handler for all 15+ CSV types defined in your nn_oop.py
 Future<Response> handleFingerprintData(Request req) async {
   try {
@@ -205,13 +369,13 @@ Future<Response> handleFingerprintData(Request req) async {
         : '../classifier_service/$fileName';
 
     final file = File(filePath);
-    await file.writeAsString(csvRow + '\n', mode: FileMode.append);
-    
-    print("Logged to $fileName");
+    await file.writeAsString('$csvRow\n', mode: FileMode.append);
+   
+    log.info('Logged to $fileName'); 
     return Response.ok(jsonEncode({'status': 'saved', 'file': fileName}),
         headers: {'content-type': 'application/json'});
-  } catch (e) {
-    print("IO Error: $e");
+    } catch (e) {
+    log.severe('IO Error: $e');
     return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
   }
 }
@@ -338,6 +502,12 @@ Future<Response> startNativeGetHandler(Request req) async {
 }
 
 void main() async {
+  // Configure logging output
+  Logger.root.level = Level.INFO;
+  Logger.root.onRecord.listen((rec) {
+    stderr.writeln('${rec.level.name}: ${rec.time}: ${rec.loggerName}: ${rec.message}');
+  });
+
   router.get('/', rootHandler);
   router.get('/health', (Request r) => Response.ok('OK'));
   router.post('/api/v1/fingerprint_data', handleFingerprintData);
@@ -349,6 +519,6 @@ void main() async {
       .addHandler(router);
 
   final server = await io.serve(handler, '0.0.0.0', 8080);
-  print('--- ENOK MCP v2026 ACTIVE ---');
-  print('Listening on port ${server.port}');
+  log.shout('--- ENOK MCP v2026 ACTIVE ---'); // SHOUT для красоты старта
+  log.info('Listening on port ${server.port}');
 }
